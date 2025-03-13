@@ -3,11 +3,11 @@
 import { JSX, useCallback, useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Sun, Moon, LogOut, Facebook, ChevronRight, Mail, Users, ChevronUp, ChevronDown } from 'lucide-react';
+import { Send, Sun, Moon, LogOut, Facebook, ChevronRight, Mail, Users, ChevronUp, ChevronDown, AlertCircle, Settings, HelpCircle, MoreVertical } from 'lucide-react';
 import { useFacebookAuth } from '@/hooks/useFacebookAuth';
 import { getPages, type FacebookPage, type Conversation, getCurrentUser, type FacebookUser } from '@/lib/facebook';
 import { useAuthStore } from '@/store/auth';
-import { decryptToken } from '@/lib/encryption';
+
 import Cookies from 'js-cookie';
 import { useTheme } from 'next-themes';
 import { sendBulkMessage } from '@/lib/facebook';
@@ -27,6 +27,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { BarChart, Bar } from 'recharts';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const SearchParamsHandler = ({ onTokenFound }: { onTokenFound: (token: string) => void }) => {
   const searchParams = useSearchParams();
@@ -130,8 +145,7 @@ export default function Dashboard(): JSX.Element {
 
         const storedToken = Cookies.get('fb_access_token');
         if (storedToken) {
-          const decodedToken = decryptToken(storedToken);
-          await fetchPages(decodedToken);
+         
         }
       } catch (error) {
         console.error('Initialization error:', error);
@@ -325,14 +339,17 @@ export default function Dashboard(): JSX.Element {
           )}
         </motion.button>
       </div>
+      
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4 }}
         className={cn(
-          "bg-card border border-border rounded-xl p-8 shadow-lg text-center max-w-md w-full",
+          "bg-card border border-border rounded-xl p-8 shadow-lg text-center max-w-md w-full relative overflow-hidden",
           isDark ? "bg-gray-900" : "bg-white"
         )}>
+        <div className="absolute top-0 right-0 w-20 h-20 bg-blue-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-16 h-16 bg-blue-500/10 rounded-full translate-y-1/2 -translate-x-1/2" />
         <Facebook className={cn(
           "h-12 w-12 mx-auto mb-4",
           isDark ? "text-blue-400" : "text-blue-600"
@@ -361,7 +378,7 @@ export default function Dashboard(): JSX.Element {
   );
   
 
-  const [] = [
+  const tagOptions = [
     { value: 'CONFIRMED_EVENT_UPDATE', label: 'Event Update' },
     { value: 'POST_PURCHASE_UPDATE', label: 'Purchase Update' },
     { value: 'ACCOUNT_UPDATE', label: 'Account Update' }
@@ -397,6 +414,26 @@ export default function Dashboard(): JSX.Element {
         </>
       )}
     </Button>
+  );
+
+ 
+
+  const LoadingCard = () => (
+    <Card className={cn(
+      "border-border relative overflow-hidden",
+      isDark ? "bg-gray-900" : "bg-white"
+    )}>
+      <CardHeader className="space-y-2">
+        <Skeleton className="h-4 w-1/3" />
+        <Skeleton className="h-4 w-1/2" />
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-2/3" />
+        </div>
+      </CardContent>
+    </Card>
   );
 
   type ChartData = {
@@ -464,7 +501,7 @@ export default function Dashboard(): JSX.Element {
             </p>
           )}
           <a
-            href={`https://facebook.com/${currentUser.id}`}
+            href={`https://facebook.com/profile.php?id=${currentUser.id}`}
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
@@ -636,47 +673,95 @@ export default function Dashboard(): JSX.Element {
             <div className="flex items-center gap-4">
               <MobileToggle />
               {selectedPage && (
-                <div className="flex items-center gap-4">
-                  <div className="w-8 h-8 relative overflow-hidden rounded-full">
-                    <Image
-                      src={selectedPage.picture.data.url}
-                      alt={selectedPage.name}
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-                  <div>
-                    <h1 className={cn(
-                      "text-lg font-semibold",
-                      isDark ? "text-gray-100" : "text-gray-900"
-                    )}>{selectedPage.name}</h1>
-                    <p className={cn(
-                      "text-sm",
-                      isDark ? "text-gray-400" : "text-gray-500"
-                    )}>
-                      {selectedPage.fan_count.toLocaleString()} followers
-                    </p>
-                  </div>
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-4">
+              <TooltipProvider>
+                <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => window.open(`https://facebook.com/${selectedPage.id}`, '_blank')}
+                className="w-8 h-8 relative overflow-hidden rounded-full ring-2 ring-offset-2 ring-blue-500 cursor-pointer hover:opacity-80 transition-opacity"
+              >
+                <Image
+                  src={selectedPage.picture.data.url}
+                  alt={selectedPage.name}
+                  fill
+                  className="object-cover"
+                />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Click to view Facebook page</p>
+            </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <div className="flex items-center gap-4">
+                <div>
+              <h1 className={cn(
+                "text-lg font-semibold flex items-center gap-2 cursor-pointer hover:text-blue-500 transition-colors",
+                isDark ? "text-gray-100" : "text-gray-900"
+              )}
+                onClick={() => window.open(`https://facebook.com/${selectedPage.id}`, '_blank')}
+              >
+                {selectedPage.name}
+                {selectedPage.fan_count > 10000 && (
+                <TooltipProvider>
+                  <Tooltip>
+                <TooltipTrigger>
+                <Badge variant="secondary">
+                  Popular Page
+                </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                <p>Click to view Facebook page</p>
+                </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                )}
+              </h1>
+              <div className="flex items-center gap-2">
+                <p className={cn(
+                "text-sm",
+                isDark ? "text-gray-400" : "text-gray-500"
+                )}>
+                {selectedPage.fan_count.toLocaleString()} followers
+                </p>
+                {selectedPage.tasks?.includes('MANAGE') && (
+                <Badge variant="outline" className="text-xs">
+                  Admin
+                </Badge>
+                )}
+              </div>
                 </div>
+               
+              </div>
+            </div>
+          </div>
               )}
             </div>
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setTheme(isDark ? 'light' : 'dark')}
-              className={cn(
-                "p-2.5 rounded-lg transition-colors",
-                isDark 
-                  ? "bg-gray-800 hover:bg-gray-700" 
-                  : "bg-gray-100 hover:bg-gray-200"
-              )}
-            >
-              {isDark ? (
-                <Sun className="h-5 w-5 text-gray-100" />
-              ) : (
-                <Moon className="h-5 w-5 text-gray-900" />
-              )}
-            </motion.button>
+            <div className="flex items-center gap-3">
+              {!selectedPage ? (
+          <AlertCircle className="h-5 w-5 text-yellow-500" />
+              ) : null}
+              <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          className={cn(
+            "p-2.5 rounded-lg transition-colors",
+            isDark 
+              ? "bg-gray-800 hover:bg-gray-700" 
+              : "bg-gray-100 hover:bg-gray-200"
+          )}
+              >
+          {isDark ? (
+            <Sun className="h-5 w-5 text-gray-100" />
+          ) : (
+            <Moon className="h-5 w-5 text-gray-900" />
+          )}
+              </motion.button>
+            </div>
+            
           </div>
         </header>
 
@@ -825,14 +910,17 @@ export default function Dashboard(): JSX.Element {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {conversations.length === 0 ? (
-                    <div className={cn(
-                      "rounded-lg p-8 text-center",
-                      isDark ? "bg-gray-950 border border-gray-800" : "bg-gray-50 border border-gray-200"
-                    )}>
-                      <p className={isDark ? "text-gray-400" : "text-gray-500"}>
-                        No conversations found for this page
-                      </p>
-                    </div>
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="animate-pulse space-y-4">
+                        <div className="flex items-center gap-4">
+                          <div className="h-12 w-12 rounded-full bg-gray-200 dark:bg-gray-700" />
+                          <div className="space-y-2 flex-1">
+                            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
+                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+                          </div>
+                        </div>
+                      </div>
+                    ))
                   ) : (
                     conversations.map((conv) => (
                         <AnimatePresence key={conv.id}>

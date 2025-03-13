@@ -1,27 +1,44 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+function isAuthenticated(request: NextRequest): boolean {
+  const token = 
+    request.cookies.get('fb_access_token')?.value || 
+    request.cookies.get('fb_token')?.value ||
+    request.nextUrl.searchParams.get('Token');
+  const hasHash = request.nextUrl.hash.includes('access_token=');
+  
+  return !!token || hasHash;
+}
+
 export function middleware(request: NextRequest) {
-  const token = request.cookies.get('fb_token');
-  const hasTokenParam = request.nextUrl.searchParams.has('Token');
-  const isAuthPath = request.nextUrl.pathname === '/dashboard';
-  const isHomePath = request.nextUrl.pathname === '/';
+  const isAuthed = isAuthenticated(request);
+  const { pathname } = request.nextUrl;
 
-  // Protect dashboard access
-  if (isAuthPath && !token && !hasTokenParam) {
-    const url = new URL('/', request.url);
-    return NextResponse.redirect(url);
+  // Force redirect to dashboard if authenticated and trying to access root
+  if (isAuthed && pathname === '/') {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // Prevent authenticated users from accessing home
-  if (isHomePath && token) {
-    const url = new URL('/dashboard', request.url);
-    return NextResponse.redirect(url);
+  // Force redirect to root if not authenticated and trying to access dashboard
+  if (!isAuthed && pathname === '/dashboard') {
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  
+  // Security headers
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  return response;
 }
 
 export const config = {
-  matcher: ['/', '/dashboard'],
+  matcher: [
+    '/',
+    '/dashboard',
+    '/dashboard/:path*'
+  ],
 };

@@ -52,7 +52,8 @@ export default function Home() {
 
   const handleFacebookLogin = () => {
     if (status === 'connected') {
-      router.push('/dashboard');
+      const token = localStorage.getItem('fb_access_token');
+      router.push(`/dashboard?Token=${token}`);
     } else {
       login();
     }

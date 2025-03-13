@@ -2,48 +2,49 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const code = searchParams.get('code');
-  const baseUrl = process.env.NEXT_PUBLIC_URL || 'https://a104-120-28-252-18.ngrok-free.app ';
-
-  if (!code) {
-    console.error('No code provided');
-    return NextResponse.redirect(`${baseUrl}/error?message=No_code_provided`);
-  }
-
+  // Get the base URL from environment or default
+  const baseUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
+  
   try {
-    const tokenResponse = await fetch(
-      'https://graph.facebook.com/v16.0/oauth/access_token?' +
-      `client_id=${process.env.NEXT_PUBLIC_FB_APP_ID}` +
-      `&client_secret=${process.env.FB_APP_SECRET}` +
-      `&redirect_uri=${encodeURIComponent(baseUrl + '/api/auth/callback')}` +
-      `&code=${code}`,
-      { 
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        }
+    // Handle hash fragment with token
+    const hash = request.nextUrl.hash;
+    if (hash) {
+      const match = hash.match(/access_token=([^&]+)/);
+      if (match) {
+        const token = decodeURIComponent(match[1]);
+        return NextResponse.redirect(`${baseUrl}/dashboard?Token=${encodeURIComponent(token)}`);
       }
-    );
+    }
+    // Remove decryption of token
+    const token = request.nextUrl.searchParams.get('token');
+    if (token) {
+      return NextResponse.redirect(`${baseUrl}/dashboard?Token=${encodeURIComponent(token)}`);
+    }
 
-    const tokenData = await tokenResponse.json();
+    // Handle code flow
+    const code = request.nextUrl.searchParams.get('code');
+    if (!code) {
+      return NextResponse.redirect(`${baseUrl}/error?message=No_auth_code`);
+    }
 
-    if (!tokenData.access_token) {
-      console.error('No access token in response:', tokenData);
+    const tokenUrl = new URL('https://graph.facebook.com/v16.0/oauth/access_token');
+    tokenUrl.searchParams.append('client_id', process.env.NEXT_PUBLIC_FB_APP_ID!);
+    tokenUrl.searchParams.append('client_secret', process.env.FB_APP_SECRET!);
+    tokenUrl.searchParams.append('redirect_uri', baseUrl);
+    tokenUrl.searchParams.append('code', code);
+
+    const response = await fetch(tokenUrl.toString(), {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+
+    const data = await response.json();
+    if (!data.access_token) {
+      console.error('Token exchange failed:', data);
       return NextResponse.redirect(`${baseUrl}/error?message=Auth_failed`);
     }
 
-    const response = NextResponse.redirect(`${baseUrl}/dashboard?Token=${tokenData.access_token}`);
-    
-    // Set HTTP-only cookie
-    response.cookies.set('fb_token', tokenData.access_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
-    });
-
-    return response;
+    return NextResponse.redirect(`${baseUrl}/dashboard?Token=${encodeURIComponent(data.access_token)}`);
   } catch (error) {
     console.error('Auth error:', error);
     return NextResponse.redirect(`${baseUrl}/error?message=Server_error`);

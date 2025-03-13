@@ -14,22 +14,26 @@ export interface FacebookPage {
 export async function getPages(accessToken: string): Promise<FacebookPage[]> {
   try {
     const fields = 'name,access_token,tasks,picture,fan_count';
+    
+    // Make direct API call with raw token
     const response = await fetch(
       `https://graph.facebook.com/v16.0/me/accounts?fields=${fields}&access_token=${accessToken}`,
       {
-        cache: 'no-store',
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-        }
+          'Accept': 'application/json',
+        },
+        next: { revalidate: 0 }
       }
     );
 
     const data = await response.json();
-    if (data.error) {
-      throw new Error(data.error.message);
+    
+    if (!response.ok) {
+      console.error('Failed to fetch pages:', data);
+      throw new Error(data.error?.message || 'Failed to fetch pages');
     }
 
-    console.log('Pages response:', data); // Debug log
     return data.data || [];
   } catch (error) {
     console.error('Error fetching pages:', error);
