@@ -26,22 +26,25 @@ export function useFacebookAuth() {
 
   const login = () => {
     const appId = process.env.NEXT_PUBLIC_FB_APP_ID;
-    const baseUrl = process.env.NEXT_PUBLIC_URL || 'https://projectfb-two.vercel.app';
+    const baseUrl = process.env.NEXT_PUBLIC_URL?.replace(/\/$/, '');
     
     if (!appId) {
       console.error('Facebook App ID is not configured');
       return;
     }
 
-    const redirectUri = `${baseUrl}/api/auth/callback`;
-    const scope = 'pages_messaging,pages_manage_metadata,pages_show_list,pages_read_engagement';
+    // The redirect URI must match exactly what's configured in Facebook App settings
+    const redirectUri = `${baseUrl}/dashboard`;
+    const scope = 'pages_messaging,pages_manage_metadata,pages_show_list,pages_read_engagement,email';
 
-    window.location.href = `https://www.facebook.com/v16.0/dialog/oauth?` +
-      `client_id=${appId}` +
+    const facebookUrl = `https://www.facebook.com/v16.0/dialog/oauth` +
+      `?client_id=${appId}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&scope=${scope}` +
-      `&response_type=code` +
-      `&state=${Math.random().toString(36).substring(7)}`;
+      `&scope=${encodeURIComponent(scope)}` +
+      `&response_type=token` + // Changed to token for implicit flow
+      `&auth_type=rerequest`;
+
+    window.location.href = facebookUrl;
   };
 
   const logout = async () => {

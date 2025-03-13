@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Sun, Moon, LogOut, Facebook, ChevronRight, Mail, Users, ChevronUp, ChevronDown } from 'lucide-react';
 import { useFacebookAuth } from '@/hooks/useFacebookAuth';
-import { getPages, type FacebookPage, type Conversation } from '@/lib/facebook';
+import { getPages, type FacebookPage, type Conversation, getCurrentUser, type FacebookUser } from '@/lib/facebook';
 import { useAuthStore } from '@/store/auth';
 import { decryptToken } from '@/lib/encryption';
 import Cookies from 'js-cookie';
@@ -33,11 +33,33 @@ const SearchParamsHandler = ({ onTokenFound }: { onTokenFound: (token: string) =
   const router = useRouter();
 
   useEffect(() => {
-    const token = searchParams.get('Token');
+    // Check for both token formats
+    const hash = window.location.hash;
+    let token = null;
+
+    // Check URL hash for token
+    if (hash) {
+      const matches = hash.match(/access_token=([^&]+)/);
+      if (matches) {
+        token = matches[1];
+      }
+    }
+
+    // Check URL params if no token in hash
+    if (!token) {
+      const params = new URLSearchParams(window.location.search);
+      token = params.get('Token') || params.get('token') || params.get('access_token');
+    }
+
     if (token) {
+      // Store token and clean URL
       localStorage.setItem('fb_access_token', token);
+      if (window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
       onTokenFound(token);
     } else {
+      // Check stored token
       const storedToken = localStorage.getItem('fb_access_token');
       if (storedToken) {
         onTokenFound(storedToken);
@@ -45,15 +67,10 @@ const SearchParamsHandler = ({ onTokenFound }: { onTokenFound: (token: string) =
         router.replace('/');
       }
     }
-  }, [searchParams, router, onTokenFound]);
+  }, [onTokenFound, router, searchParams]);
 
   return null;
 };
-
-interface MessageTag {
-  value: 'CONFIRMED_EVENT_UPDATE' | 'POST_PURCHASE_UPDATE' | 'ACCOUNT_UPDATE';
-  label: string;
-}
 
 export default function Dashboard(): JSX.Element {
 
@@ -74,6 +91,7 @@ export default function Dashboard(): JSX.Element {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
   const [showMessages, setShowMessages] = useState(true);
+  const [currentUser, setCurrentUser] = useState<FacebookUser | null>(null);
 
   // 2. Fix fetchPages callback
   const fetchPages = useCallback(async (token: string) => {
@@ -85,12 +103,10 @@ export default function Dashboard(): JSX.Element {
     }
   }, []);
 
-  // 3. Fix handleTokenFound callback
   const handleTokenFound = useCallback((token: string) => {
     fetchPages(token);
   }, [fetchPages]);
 
-  // 4. Fix handleLogout callback
   const handleLogout = useCallback(async () => {
     try {
       setPages([]);
@@ -112,7 +128,7 @@ export default function Dashboard(): JSX.Element {
           history.replaceState({}, document.title, window.location.href.split('#')[0]);
         }
 
-        const storedToken = Cookies.get('fb_token');
+        const storedToken = Cookies.get('fb_access_token');
         if (storedToken) {
           const decodedToken = decryptToken(storedToken);
           await fetchPages(decodedToken);
@@ -125,6 +141,33 @@ export default function Dashboard(): JSX.Element {
 
     init();
   }, [fetchPages, handleLogout]);
+
+  const fetchUserData = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('fb_access_token') || Cookies.get('fb_access_token');
+      if (!token) {
+        console.error('No token found');
+        return;
+      }
+
+      console.log('Fetching user data...'); // Debug log
+      const userData = await getCurrentUser(token);
+      console.log('User data fetched:', userData); // Debug log
+      
+      if (userData) {
+        setCurrentUser(userData);
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      toast.error('Failed to load user profile');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      fetchUserData();
+    }
+  }, [mounted, fetchUserData]);
 
   // 6. Fix resize effect
   useEffect(() => {
@@ -261,7 +304,7 @@ export default function Dashboard(): JSX.Element {
   };
 
   // Early return if no page is selected
-  const NoPageSelected = () => (
+  const NoPageSelected = (): JSX.Element => (
     <div className="flex flex-col items-center justify-center min-h-[60vh] p-8">
       <div className="absolute top-6 right-6">
         <motion.button
@@ -300,30 +343,29 @@ export default function Dashboard(): JSX.Element {
         )}>
           Select a Page to Message
         </h2>
-        <p className={cn(
-          "mb-6",
-          isDark ? "text-gray-400" : "text-gray-500"
-        )}>
-          Choose a Facebook page from the sidebar to view conversations and send messages.
-        </p>
-        <motion.div 
-          animate={{ y: [0, 8, 0] }}
-          transition={{ repeat: Infinity, duration: 1.5 }}
-          className={isDark ? "text-gray-400" : "text-gray-500"}
-        >
-          <ChevronRight className="h-6 w-6 transform -rotate-90" />
+          <p className={cn(
+            "mb-6",
+            isDark ? "text-gray-400" : "text-gray-500"
+          )}>
+            Choose a Facebook page from the sidebar to view conversations and send messages.
+          </p>
+          <motion.div 
+            animate={{ y: [0, 8, 0] }}
+            transition={{ repeat: Infinity, duration: 1.5 }}
+            className={isDark ? "text-gray-400" : "text-gray-500"}
+          >
+            <ChevronRight className="h-6 w-6 transform -rotate-90" />
+          </motion.div>
         </motion.div>
-      </motion.div>
     </div>
   );
+  
 
-  const messageTags: MessageTag[] = [
+  const [] = [
     { value: 'CONFIRMED_EVENT_UPDATE', label: 'Event Update' },
     { value: 'POST_PURCHASE_UPDATE', label: 'Purchase Update' },
     { value: 'ACCOUNT_UPDATE', label: 'Account Update' }
   ];
-
-  // Mobile toggle button for sidebar
   const MobileToggle = () => (
     <button
       onClick={() => setSidebarOpen(!isSidebarOpen)}
@@ -373,6 +415,69 @@ export default function Dashboard(): JSX.Element {
       </BarChart>
     </div>
   );
+
+  const UserProfile = () => {
+    if (!currentUser) {
+      return (
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-gray-200 animate-pulse" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 bg-gray-200 rounded animate-pulse" />
+            <div className="h-3 bg-gray-200 rounded animate-pulse w-2/3" />
+          </div>
+        </div>
+      );
+    }
+  
+    return (
+      <div className="flex items-center gap-4">
+        <div className="relative w-10 h-10 rounded-full overflow-hidden border border-border">
+          {currentUser.picture?.data?.url ? (
+            <Image
+              src={currentUser.picture.data.url}
+              alt={currentUser.name}
+              fill
+              className="object-cover"
+            />
+          ) : (
+            <div className={cn(
+              "w-full h-full flex items-center justify-center text-lg font-semibold",
+              isDark ? "bg-gray-800 text-gray-400" : "bg-gray-100 text-gray-600"
+            )}>
+              {currentUser.name?.[0]?.toUpperCase()}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className={cn(
+            "font-medium truncate",
+            isDark ? "text-gray-100" : "text-gray-900"
+          )}>
+            {currentUser.name}
+          </h3>
+          {currentUser.email && (
+            <p className={cn(
+              "text-sm truncate",
+              isDark ? "text-gray-400" : "text-gray-500"
+            )}>
+              {currentUser.email}
+            </p>
+          )}
+          <a
+            href={`https://facebook.com/${currentUser.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "text-xs hover:underline mt-1 inline-block",
+              isDark ? "text-blue-400" : "text-blue-600"
+            )}
+          >
+            View Profile
+          </a>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className={cn(
@@ -429,26 +534,14 @@ export default function Dashboard(): JSX.Element {
             )}
           >
             <div className="flex flex-col h-full">
-              <div className={cn(
-                "p-6 border-b",
+              {/* User Profile Section */}
+                <div className={cn(
+                "p-4 border-b",
                 isDark ? "border-gray-800" : "border-gray-200"
-              )}>
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <Facebook className={cn(
-                      "h-8 w-8",
-                      isDark ? "text-blue-400" : "text-blue-600"
-                    )} />
-                  </div>
-                  <span className={cn(
-                    "text-xl font-bold",
-                    isDark ? "text-gray-100" : "text-gray-900"
-                  )}>
-                    Kicker<span className={isDark ? "text-blue-400" : "text-blue-600"}>Pro</span>
-                  </span>
+                )}>
+                <UserProfile />
                 </div>
-              </div>
-              
+
               {/* Pages List - Enhanced */}
               <div className="flex-1 overflow-y-auto p-4">
                 <div className="space-y-2">
@@ -875,6 +968,7 @@ export default function Dashboard(): JSX.Element {
                         )}
                     </div>
                   </motion.section>
+      
                   {/* Step 2: Message Type */}
                   <motion.section
                     initial={{ opacity: 0, y: 20 }}
@@ -892,29 +986,109 @@ export default function Dashboard(): JSX.Element {
                       Step 2: Message Type
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
-                      {messageTags.map((tag) => (
-                        <motion.div 
-                          key={tag.value} 
-                          whileHover={{ scale: 1.02 }} 
-                          whileTap={{ scale: 0.98 }}
+                      <motion.div 
+                        whileHover={{ scale: 1.02 }} 
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <Button
+                          variant={selectedTag === 'CONFIRMED_EVENT_UPDATE' ? "default" : "outline"}
+                          onClick={() => setSelectedTag('CONFIRMED_EVENT_UPDATE')}
+                          className={cn(
+                            "w-full transition-colors font-medium flex items-center justify-center gap-2",
+                            selectedTag === 'CONFIRMED_EVENT_UPDATE'
+                              ? "bg-blue-600 hover:bg-blue-700 text-white border-transparent"
+                              : isDark
+                                ? "bg-transparent border-gray-800 text-gray-100 hover:bg-gray-800"
+                                : "bg-transparent border-gray-200 text-gray-900 hover:bg-gray-100"
+                          )}
                         >
-                          <Button
-                            variant={selectedTag === tag.value ? "default" : "outline"}
-                            onClick={() => setSelectedTag(tag.value)}
-                            className={cn(
-                              "w-full transition-colors",
-                              selectedTag === tag.value
-                                ? "bg-blue-600 hover:bg-blue-700 text-white border-transparent"
-                                : "bg-transparent border-gray-800 text-gray-100 hover:bg-gray-800"
-                            )}
+                          <svg
+                            className="w-4 h-4"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
                           >
-                            {tag.label}
-                          </Button>
-                        </motion.div>
-                      ))}
+                            <path d="M20 7h-7" />
+                            <path d="M14 17H5" />
+                            <circle cx="17" cy="17" r="3" />
+                            <circle cx="7" cy="7" r="3" />
+                          </svg>
+                          Event Update
+                        </Button>
+                      </motion.div>
+
+                      <motion.div 
+                        whileHover={{ scale: 1.02 }} 
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <Button
+                          variant={selectedTag === 'POST_PURCHASE_UPDATE' ? "default" : "outline"}
+                          onClick={() => setSelectedTag('POST_PURCHASE_UPDATE')}
+                          className={cn(
+                            "w-full transition-colors font-medium flex items-center justify-center gap-2",
+                            selectedTag === 'POST_PURCHASE_UPDATE'
+                              ? "bg-blue-600 hover:bg-blue-700 text-white border-transparent"
+                              : isDark
+                                ? "bg-transparent border-gray-800 text-gray-100 hover:bg-gray-800"
+                                : "bg-transparent border-gray-200 text-gray-900 hover:bg-gray-100"
+                          )}
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M20 7h-7" />
+                            <path d="M14 17H5" />
+                            <circle cx="17" cy="17" r="3" />
+                            <circle cx="7" cy="7" r="3" />
+                          </svg>
+                          Purchase Update
+                        </Button>
+                      </motion.div>
+
+                      <motion.div 
+                        whileHover={{ scale: 1.02 }} 
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <Button
+                          variant={selectedTag === 'ACCOUNT_UPDATE' ? "default" : "outline"}
+                          onClick={() => setSelectedTag('ACCOUNT_UPDATE')}
+                          className={cn(
+                            "w-full transition-colors font-medium flex items-center justify-center gap-2",
+                            selectedTag === 'ACCOUNT_UPDATE'
+                              ? "bg-blue-600 hover:bg-blue-700 text-white border-transparent"
+                              : isDark
+                                ? "bg-transparent border-gray-800 text-gray-100 hover:bg-gray-800"
+                                : "bg-transparent border-gray-200 text-gray-900 hover:bg-gray-100"
+                          )}
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M20 7h-7" />
+                            <path d="M14 17H5" />
+                            <circle cx="17" cy="17" r="3" />
+                            <circle cx="7" cy="7" r="3" />
+                          </svg>
+                          Account Update
+                        </Button>
+                      </motion.div>
                     </div>
                   </motion.section>
-                  {/* Step 3: Write Message */}
                   <motion.section
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -924,7 +1098,7 @@ export default function Dashboard(): JSX.Element {
                       isDark ? "bg-gray-950 border border-gray-800" : "bg-gray-50 border border-gray-200"
                     )}
                   >
-                  <h2 className={cn(
+                 <h2 className={cn(
                     "text-lg font-semibold mb-4",
                     isDark ? "text-gray-100" : "text-gray-900"
                   )}>

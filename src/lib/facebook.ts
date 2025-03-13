@@ -15,8 +15,8 @@ export async function getPages(accessToken: string): Promise<FacebookPage[]> {
   try {
     const fields = 'name,access_token,tasks,picture,fan_count';
     const response = await fetch(
-      `https://graph.facebook.com/v12.0/me/accounts?fields=${fields}&access_token=${encodeURIComponent(accessToken)}`,
-      { 
+      `https://graph.facebook.com/v16.0/me/accounts?fields=${fields}&access_token=${accessToken}`,
+      {
         cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
@@ -29,6 +29,7 @@ export async function getPages(accessToken: string): Promise<FacebookPage[]> {
       throw new Error(data.error.message);
     }
 
+    console.log('Pages response:', data); // Debug log
     return data.data || [];
   } catch (error) {
     console.error('Error fetching pages:', error);
@@ -111,4 +112,68 @@ export interface Conversation {
   unread_count: number;
   can_reply: boolean;
   labels?: string[];
+}
+
+export interface FacebookUser {
+  id: string;
+  name: string;
+  email: string;
+  picture: {
+    data: {
+      url: string;
+      width: number;
+      height: number;
+    }
+  };
+}
+
+export function getTokenFromUrl(): string | null {
+  if (typeof window !== 'undefined') {
+    // Check multiple possible parameter names
+    const params = new URLSearchParams(window.location.search);
+    const possibleTokens = [
+      params.get('access_token'),
+      params.get('token'),
+      params.get('Token'),
+      params.get('code')
+    ];
+    
+    const token = possibleTokens.find(t => t !== null);
+    return token ? decodeURIComponent(token) : null;
+  }
+  return null;
+}
+
+export async function getCurrentUser(token: string): Promise<FacebookUser | null> {
+  try {
+    // Try both with and without v16.0
+    const urls = [
+      `https://graph.facebook.com/me?fields=id,name,email,picture&access_token=${token}`,
+      `https://graph.facebook.com/v16.0/me?fields=id,name,email,picture&access_token=${token}`
+    ];
+
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, {
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (!data.error) {
+            return data;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed attempt:', e);
+      }
+    }
+    throw new Error('Failed to fetch user data after all attempts');
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    return null;
+  }
 }

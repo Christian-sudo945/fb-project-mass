@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
-  const baseUrl = process.env.NEXT_PUBLIC_URL || 'https://projectfb-two.vercel.app';
+  const baseUrl = process.env.NEXT_PUBLIC_URL || 'https://a104-120-28-252-18.ngrok-free.app ';
 
   if (!code) {
     console.error('No code provided');
@@ -49,3 +49,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/error?message=Server_error`);
   }
 }
+

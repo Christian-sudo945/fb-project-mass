@@ -8,7 +8,14 @@ import { useEffect, useState, useRef } from 'react';
 import { ModeToggle } from "@/components/mode-toggle";
 import { useRouter } from 'next/navigation';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { cn  } from '@/lib/utils';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 export default function Home() {
   const { status, login } = useFacebookAuth();
@@ -141,6 +148,25 @@ export default function Home() {
     </div>
   );
 
+  const faqItems = [
+    {
+      question: "What is KickerPro?",
+      answer: "KickerPro is an enterprise-grade Facebook marketing solution that helps businesses manage and automate their Facebook messaging campaigns effectively."
+    },
+    {
+      question: "How does bulk messaging work?",
+      answer: "Our bulk messaging feature allows you to send personalized messages to multiple recipients while complying with Facebook's messaging policies and guidelines."
+    },
+    {
+      question: "Is it compliant with Facebook's policies?",
+      answer: "Yes, KickerPro is fully compliant with Facebook's messaging policies and terms of service. We ensure all communications follow the platform's guidelines."
+    },
+    {
+      question: "What support do you offer?",
+      answer: "We provide 24/7 technical support, comprehensive documentation, and dedicated account managers for enterprise customers."
+    }
+  ];
+
   return (
     <div className="min-h-screen flex flex-col bg-background transition-all duration-500">
       {/* Header */}
@@ -176,7 +202,7 @@ export default function Home() {
 
       <main className="flex-1" ref={ref}>
         {/* Hero Section with Parallax */}
-        <motion.section 
+        <motion.section
           className="relative overflow-hidden py-20 md:py-32"
           style={{ y: parallaxY, opacity: parallaxOpacity }}
         >
@@ -296,6 +322,61 @@ export default function Home() {
           </div>
         </section>
 
+        {/* FAQ Section */}
+        <section className="py-20 bg-background border-y border-border">
+          <div className="container mx-auto px-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="max-w-3xl mx-auto"
+            >
+              <h2 className={cn(
+                "text-3xl font-bold text-center mb-12",
+                isDark ? "text-gray-100" : "text-gray-900"
+              )}>
+                Frequently Asked Questions
+              </h2>
+
+              <Accordion type="single" collapsible className="w-full">
+                {faqItems.map((item, index) => (
+                  <AccordionItem
+                    key={index}
+                    value={`item-${index}`}
+                    className={cn(
+                      "border-b last:border-0 px-6",
+                      isDark
+                        ? "border-gray-800 hover:bg-gray-950/50"
+                        : "border-gray-200 hover:bg-gray-50/50"
+                    )}
+                  >
+                    <AccordionTrigger className={cn(
+                      "text-left no-underline hover:no-underline transition-all duration-300 ease-in-out",
+                      isDark ? "text-gray-100" : "text-gray-900"
+                    )}>
+                      {item.question}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <motion.div
+                      initial={{ height: 0, opacity: 0, y: -20 }}
+                      animate={{ height: "auto", opacity: 1, y: 0 }}
+                      exit={{ height: 0, opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
+                      className={cn(
+                        "overflow-hidden",
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      )}
+                      >
+                      {item.answer}
+                      </motion.div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </motion.div>
+          </div>
+        </section>
+
         {/* Pricing Section */}
         <section id="pricing" className="py-20 bg-secondary/10">
           <div className="container mx-auto px-4">
@@ -306,7 +387,7 @@ export default function Home() {
               className="text-center mb-16"
             >
               <h2 className="text-3xl font-bold text-foreground mb-4">
-                Simple, Transparent Pricing
+                Pricing Plans
               </h2>
               <p className="text-muted-foreground">
                 Choose the plan that best fits your needs
@@ -321,9 +402,7 @@ export default function Home() {
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: index * 0.1 }}
-                  className={`bg-background rounded-xl p-6 border ${
-                    plan.recommended ? 'border-blue-500 shadow-lg' : 'border-border'
-                  }`}
+                  className={`bg-background rounded-xl p-6 border ${plan.recommended ? 'border-blue-500 shadow-lg' : 'border-border'}`}
                 >
                   {plan.recommended && (
                     <div className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-4">
@@ -349,11 +428,9 @@ export default function Home() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => handleFacebookLogin()}
-                    className={`w-full py-2 px-4 rounded-lg font-medium ${
-                      plan.recommended
+                    className={`w-full py-2 px-4 rounded-lg font-medium ${plan.recommended
                         ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                        : 'bg-secondary hover:bg-secondary/80 text-foreground'
-                    }`}
+                        : 'bg-secondary hover:bg-secondary/80 text-foreground'}`}
                   >
                     Get Started
                   </motion.button>
@@ -365,39 +442,39 @@ export default function Home() {
 
         {/* Features Section */}
         <section id="features" className="py-20 bg-secondary/20">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-foreground mb-4">Powerful Features</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">Everything you need to manage your Facebook marketing campaigns effectively</p>
-          </div>
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl font-bold text-foreground mb-4">Powerful Features</h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto">Everything you need to manage your Facebook marketing campaigns effectively</p>
+            </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            {features.map((feature, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                viewport={{ once: true }}
-                className="bg-background rounded-xl p-6 shadow-sm border border-border hover:shadow-md transition-all duration-200"
-              >
-                <div className="bg-blue-100 dark:bg-blue-900/20 w-12 h-12 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400 mb-4">
-                  {feature.icon}
-                </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">{feature.title}</h3>
-                <p className="text-muted-foreground">{feature.description}</p>
-              </motion.div>
-            ))}
+            <div className="grid md:grid-cols-3 gap-8">
+              {features.map((feature, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  viewport={{ once: true }}
+                  className="bg-background rounded-xl p-6 shadow-sm border border-border hover:shadow-md transition-all duration-200"
+                >
+                  <div className="bg-blue-100 dark:bg-blue-900/20 w-12 h-12 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400 mb-4">
+                    {feature.icon}
+                  </div>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">{feature.title}</h3>
+                  <p className="text-muted-foreground">{feature.description}</p>
+                </motion.div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
 
       {/* Footer */}
       <footer className="border-t border-border bg-background py-12 transition-colors duration-300">
         <div className="container mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
-            <div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+            <div className="md:col-span-1">
               <div className="flex items-center gap-2 mb-4">
                 <Facebook className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 <span className="font-bold text-foreground">KickerPro</span>
