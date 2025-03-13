@@ -1,22 +1,43 @@
 'use client'
 
 import { useFacebookAuth } from '@/hooks/useFacebookAuth';
-import { motion } from "framer-motion";
-import { ArrowRight, Facebook, Mail, ChevronRight } from "lucide-react";
+import { motion, useScroll, useTransform } from "framer-motion";
+import { ArrowRight, Facebook, Mail, ChevronRight, Book, Code, Settings, ChevronDown } from "lucide-react";
 import { useTheme } from 'next-themes';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ModeToggle } from "@/components/mode-toggle";
 import { useRouter } from 'next/navigation';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 export default function Home() {
   const { status, login } = useFacebookAuth();
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
+  const ref = useRef(null);
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start start", "end start"]
+  });
+  const [currency, setCurrency] = useState<'USD' | 'PHP'>('USD');
+  
+  // Exchange rate (1 USD to PHP)
+  const phpRate = 56.50;
+
+  const formatPrice = (usdPrice: string) => {
+    const price = parseFloat(usdPrice);
+    return currency === 'USD' 
+      ? `$${price}`
+      : `₱${Math.round(price * phpRate)}`;
+  };
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const parallaxY = useTransform(scrollYProgress, [0, 1], ["0%", "50%"]);
+  const parallaxOpacity = useTransform(scrollYProgress, [0, 0.5, 1], [1, 0.5, 0]);
 
   if (!mounted) return null;
 
@@ -68,8 +89,61 @@ export default function Home() {
     }
   ];
 
+  const pricingPlans = [
+    {
+      name: "Starter",
+      price: "49",
+      features: ["1,000 messages/month", "Basic analytics", "Email support"],
+      recommended: false
+    },
+    {
+      name: "Professional",
+      price: "99",
+      features: ["10,000 messages/month", "Advanced analytics", "Priority support", "API access"],
+      recommended: true
+    },
+    {
+      name: "Enterprise",
+      price: "249",
+      features: ["Unlimited messages", "Custom analytics", "24/7 support", "Custom integration"],
+      recommended: false
+    }
+  ];
+
+  const codeExample = `
+  // Example usage of KickerPro API
+  const kickerPro = new KickerPro({
+    apiKey: 'your-api-key'
+  });
+  
+  await kickerPro.sendMessage({
+    audience: 'followers',
+    template: 'welcome',
+    personalization: {
+      name: '{{user.firstName}}'
+    }
+  });
+  `;
+
+  const CurrencySelector = () => (
+    <div className="flex items-center justify-center mb-8">
+      <div className="relative inline-block">
+        <select
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value as 'USD' | 'PHP')}
+          className="appearance-none bg-background border border-border rounded-lg px-4 py-2 pr-10 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="USD">USD ($)</option>
+          <option value="PHP">PHP (₱)</option>
+        </select>
+        <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen flex flex-col bg-background transition-all duration-500">
+      {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 transition-colors duration-300">
         <div className="container mx-auto px-4 py-3">
           <nav className="flex items-center justify-between">
@@ -100,11 +174,14 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="flex-1">
-        {/* Hero Section */}
-        <section className="relative overflow-hidden py-20 md:py-32">
+      <main className="flex-1" ref={ref}>
+        {/* Hero Section with Parallax */}
+        <motion.section 
+          className="relative overflow-hidden py-20 md:py-32"
+          style={{ y: parallaxY, opacity: parallaxOpacity }}
+        >
           <div className="container mx-auto px-4 relative z-10">
-            <motion.div 
+            <motion.div
               initial="initial"
               animate="animate"
               variants={stagger}
@@ -117,7 +194,7 @@ export default function Home() {
                 Enterprise-Grade Facebook Marketing Solution
               </motion.div>
 
-              <motion.h1 
+              <motion.h1
                 variants={fadeInUp}
                 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 tracking-tight transition-colors duration-300 leading-tight"
               >
@@ -126,14 +203,14 @@ export default function Home() {
                   Facebook messaging
                 </span>
               </motion.h1>
-              
+
               <motion.p
                 variants={fadeInUp}
                 className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto"
               >
                 The most powerful platform for businesses to engage, convert, and retain customers through Facebook&apos;s messaging platform.
               </motion.p>
-              
+
               <motion.div
                 variants={fadeInUp}
                 className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12"
@@ -148,7 +225,7 @@ export default function Home() {
                   <span>{status === 'connected' ? 'Go to Dashboard' : 'Continue with Facebook'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </motion.button>
-                
+
                 <motion.a
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
@@ -160,7 +237,7 @@ export default function Home() {
               </motion.div>
             </motion.div>
           </div>
-          
+
           {/* Background Elements */}
           <motion.div
             variants={fadeIn}
@@ -171,38 +248,152 @@ export default function Home() {
             <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-400/10 dark:bg-blue-400/5 rounded-full blur-3xl"></div>
             <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-blue-400/10 dark:bg-blue-400/5 rounded-full blur-3xl"></div>
           </motion.div>
+        </motion.section>
+
+        {/* Documentation Section */}
+        <section id="documentation" className="py-20">
+          <div className="container mx-auto px-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="max-w-4xl mx-auto"
+            >
+              <h2 className="text-3xl font-bold text-foreground mb-8">Documentation</h2>
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-foreground">Quick Start Guide</h3>
+                  <p className="text-muted-foreground">Get started with KickerPro in minutes</p>
+                  <div className="bg-secondary/20 rounded-lg p-6">
+                    <SyntaxHighlighter language="javascript" style={tomorrow}>
+                      {codeExample}
+                    </SyntaxHighlighter>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="grid gap-4">
+                    {[
+                      { icon: <Book />, title: "Guides", desc: "Step-by-step tutorials" },
+                      { icon: <Code />, title: "API Reference", desc: "Complete API documentation" },
+                      { icon: <Settings />, title: "Configuration", desc: "Setup and customization" }
+                    ].map((item, i) => (
+                      <motion.div
+                        key={i}
+                        whileHover={{ scale: 1.02 }}
+                        className="flex items-start gap-4 p-4 bg-background rounded-lg border border-border"
+                      >
+                        <div className="text-blue-600 dark:text-blue-400">{item.icon}</div>
+                        <div>
+                          <h4 className="font-medium text-foreground">{item.title}</h4>
+                          <p className="text-sm text-muted-foreground">{item.desc}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         </section>
 
-        {/* Features Section */}
-        <section id="features" className="py-20 bg-secondary/20">
+        {/* Pricing Section */}
+        <section id="pricing" className="py-20 bg-secondary/10">
           <div className="container mx-auto px-4">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl font-bold text-foreground mb-4">Powerful Features</h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto">Everything you need to manage your Facebook marketing campaigns effectively</p>
-            </div>
-            
-            <div className="grid md:grid-cols-3 gap-8">
-              {features.map((feature, index) => (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="text-center mb-16"
+            >
+              <h2 className="text-3xl font-bold text-foreground mb-4">
+                Simple, Transparent Pricing
+              </h2>
+              <p className="text-muted-foreground">
+                Choose the plan that best fits your needs
+              </p>
+              <CurrencySelector />
+            </motion.div>
+
+            <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+              {pricingPlans.map((plan, index) => (
                 <motion.div
                   key={index}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: index * 0.1 }}
-                  viewport={{ once: true }}
-                  className="bg-background rounded-xl p-6 shadow-sm border border-border hover:shadow-md transition-all duration-200"
+                  className={`bg-background rounded-xl p-6 border ${
+                    plan.recommended ? 'border-blue-500 shadow-lg' : 'border-border'
+                  }`}
                 >
-                  <div className="bg-blue-100 dark:bg-blue-900/20 w-12 h-12 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400 mb-4">
-                    {feature.icon}
+                  {plan.recommended && (
+                    <div className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-4">
+                      Recommended
+                    </div>
+                  )}
+                  <h3 className="text-xl font-bold text-foreground mb-2">{plan.name}</h3>
+                  <div className="mb-4">
+                    <span className="text-4xl font-bold text-foreground">
+                      {formatPrice(plan.price)}
+                    </span>
+                    <span className="text-muted-foreground">/month</span>
                   </div>
-                  <h3 className="text-xl font-semibold text-foreground mb-2">{feature.title}</h3>
-                  <p className="text-muted-foreground">{feature.description}</p>
+                  <ul className="space-y-3 mb-6">
+                    {plan.features.map((feature, i) => (
+                      <li key={i} className="flex items-center gap-2 text-muted-foreground">
+                        <ChevronRight className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleFacebookLogin()}
+                    className={`w-full py-2 px-4 rounded-lg font-medium ${
+                      plan.recommended
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                        : 'bg-secondary hover:bg-secondary/80 text-foreground'
+                    }`}
+                  >
+                    Get Started
+                  </motion.button>
                 </motion.div>
               ))}
             </div>
           </div>
         </section>
-      </main>
 
+        {/* Features Section */}
+        <section id="features" className="py-20 bg-secondary/20">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold text-foreground mb-4">Powerful Features</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">Everything you need to manage your Facebook marketing campaigns effectively</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {features.map((feature, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                viewport={{ once: true }}
+                className="bg-background rounded-xl p-6 shadow-sm border border-border hover:shadow-md transition-all duration-200"
+              >
+                <div className="bg-blue-100 dark:bg-blue-900/20 w-12 h-12 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400 mb-4">
+                  {feature.icon}
+                </div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">{feature.title}</h3>
+                <p className="text-muted-foreground">{feature.description}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+
+      {/* Footer */}
       <footer className="border-t border-border bg-background py-12 transition-colors duration-300">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
@@ -215,7 +406,7 @@ export default function Home() {
                 Enterprise-grade Facebook marketing solutions for growing businesses.
               </p>
             </div>
-            
+
             <div>
               <h4 className="font-medium text-foreground mb-4">Product</h4>
               <ul className="space-y-2">
@@ -224,7 +415,7 @@ export default function Home() {
                 <li><a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Integrations</a></li>
               </ul>
             </div>
-            
+
             <div>
               <h4 className="font-medium text-foreground mb-4">Company</h4>
               <ul className="space-y-2">
@@ -233,7 +424,7 @@ export default function Home() {
                 <li><a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Careers</a></li>
               </ul>
             </div>
-            
+
             <div>
               <h4 className="font-medium text-foreground mb-4">Legal</h4>
               <ul className="space-y-2">
@@ -243,7 +434,7 @@ export default function Home() {
               </ul>
             </div>
           </div>
-          
+
           <div className="pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} KickerPro. All rights reserved.

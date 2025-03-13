@@ -1,7 +1,3 @@
-const fs = require('fs');
-const path = require('path');
-
-/** @type {import('next').NextConfig} */
 const nextConfig = {
   async headers() {
     return [
@@ -14,21 +10,33 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "frame-ancestors 'none'",
+            value: "frame-ancestors 'self' https://*.ngrok.io", // Allow ngrok to be an iframe ancestor
           },
         ],
       },
     ];
   },
+
   images: {
-    domains: [
-      'scontent.fdvo1-1.fna.fbcdn.net',
-      'scontent.fdvo1-2.fna.fbcdn.net',
-      'platform-lookaside.fbsbx.com',
-      'graph.facebook.com',
-      'scontent.xx.fbcdn.net'
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.fbcdn.net',
+      },
+      {
+        protocol: 'https',
+        hostname: 'platform-lookaside.fbsbx.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'graph.facebook.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.ngrok-free.app',
+      },
     ],
   },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;

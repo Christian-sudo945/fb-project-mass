@@ -3,7 +3,7 @@
 import { JSX, useCallback, useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronDown, ChevronUp, Sun, Moon, LogOut, Facebook, ChevronRight } from 'lucide-react';
+import { Send, Sun, Moon, LogOut, Facebook, ChevronRight, Mail, Users, ChevronUp, ChevronDown } from 'lucide-react';
 import { useFacebookAuth } from '@/hooks/useFacebookAuth';
 import { getPages, type FacebookPage, type Conversation } from '@/lib/facebook';
 import { useAuthStore } from '@/store/auth';
@@ -19,8 +19,15 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
 import { cn } from "@/lib/utils";
 import Image from 'next/image';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { BarChart, Bar } from 'recharts';
 
-// Create a separate component for handling search params
 const SearchParamsHandler = ({ onTokenFound }: { onTokenFound: (token: string) => void }) => {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -31,7 +38,6 @@ const SearchParamsHandler = ({ onTokenFound }: { onTokenFound: (token: string) =
       localStorage.setItem('fb_access_token', token);
       onTokenFound(token);
     } else {
-      // Check local storage
       const storedToken = localStorage.getItem('fb_access_token');
       if (storedToken) {
         onTokenFound(storedToken);
@@ -50,17 +56,11 @@ interface MessageTag {
 }
 
 export default function Dashboard(): JSX.Element {
-  const fetchPages = useCallback(async (token: string) => {
-    try {
-      const pageList = await getPages(token);
-      setPages(pageList);
-    } catch (error) {
-      console.error('Failed to fetch pages:', error);
-    }
-  }, []);
 
-  // State declarations
   const { theme, setTheme } = useTheme();
+  const router = useRouter();
+  const { setToken } = useAuthStore();
+  const { logout } = useFacebookAuth();
   const [mounted, setMounted] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [pages, setPages] = useState<FacebookPage[]>([]);
@@ -74,36 +74,38 @@ export default function Dashboard(): JSX.Element {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
   const [showMessages, setShowMessages] = useState(true);
-  const router = useRouter();
-  const { setToken } = useAuthStore();
-  const { logout } = useFacebookAuth();
 
-  // Theme initialization
-  useEffect(() => {
-    setMounted(true);
+  // 2. Fix fetchPages callback
+  const fetchPages = useCallback(async (token: string) => {
+    try {
+      const pageList = await getPages(token);
+      setPages(pageList);
+    } catch (error) {
+      console.error('Failed to fetch pages:', error);
+    }
   }, []);
 
-  // Handlelogout function
-  const handleLogout = useCallback(async () => {
-    try {
-      setPages([]);
-      setToken('');
-
-      // Perform logout through service
-      await logout();
-    } catch (error) {
-      console.error('Logout error:', error);
-      router.replace('/');
-    }
-  }, [setPages, setToken, logout, router]);
-
-  // Handle token found callback
+  // 3. Fix handleTokenFound callback
   const handleTokenFound = useCallback((token: string) => {
     fetchPages(token);
   }, [fetchPages]);
 
-  // Data initialization
+  // 4. Fix handleLogout callback
+  const handleLogout = useCallback(async () => {
+    try {
+      setPages([]);
+      setToken('');
+      await logout();
+      router.replace('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      router.replace('/');
+    }
+  }, [setToken, logout, router]);
+
+  // 5. Fix initialization effect
   useEffect(() => {
+    setMounted(true);
     const init = async () => {
       try {
         if (window.location.hash === '#_=_') {
@@ -122,9 +124,9 @@ export default function Dashboard(): JSX.Element {
     };
 
     init();
-  }, [handleLogout, fetchPages]);
+  }, [fetchPages, handleLogout]);
 
-  // Resize effect
+  // 6. Fix resize effect
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
@@ -139,7 +141,25 @@ export default function Dashboard(): JSX.Element {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Prevent hydration issues
+  // 7. Fix getChartData callback
+  const getChartData = useCallback(() => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const initial = days.map(day => ({ name: day, value: 0 }));
+    const result = [...initial];
+    
+    conversations.forEach((conv) => {
+      const convDate = new Date(conv.updated_time);
+      const dayIndex = convDate.getDay();
+      result[dayIndex] = {
+        name: days[dayIndex],
+        value: (result[dayIndex]?.value || 0) + 1
+      };
+    });
+    
+    return result;
+  }, [conversations]);
+
+  // Early return for hydration
   if (!mounted) {
     return <div className="min-h-screen bg-background" />;
   }
@@ -243,23 +263,53 @@ export default function Dashboard(): JSX.Element {
   // Early return if no page is selected
   const NoPageSelected = () => (
     <div className="flex flex-col items-center justify-center min-h-[60vh] p-8">
+      <div className="absolute top-6 right-6">
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          className={cn(
+            "p-2.5 rounded-lg transition-colors",
+            isDark 
+              ? "bg-gray-800 hover:bg-gray-700" 
+              : "bg-gray-100 hover:bg-gray-200"
+          )}
+        >
+          {isDark ? (
+            <Sun className="h-5 w-5 text-gray-100" />
+          ) : (
+            <Moon className="h-5 w-5 text-gray-900" />
+          )}
+        </motion.button>
+      </div>
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4 }}
-        className="bg-card border border-border rounded-xl p-8 shadow-lg text-center max-w-md w-full"
-      >
-        <Facebook className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold mb-3">
+        className={cn(
+          "bg-card border border-border rounded-xl p-8 shadow-lg text-center max-w-md w-full",
+          isDark ? "bg-gray-900" : "bg-white"
+        )}>
+        <Facebook className={cn(
+          "h-12 w-12 mx-auto mb-4",
+          isDark ? "text-blue-400" : "text-blue-600"
+        )} />
+        <h2 className={cn(
+          "text-2xl font-bold mb-3",
+          isDark ? "text-gray-100" : "text-gray-900"
+        )}>
           Select a Page to Message
         </h2>
-        <p className="mb-6 text-muted-foreground">
+        <p className={cn(
+          "mb-6",
+          isDark ? "text-gray-400" : "text-gray-500"
+        )}>
           Choose a Facebook page from the sidebar to view conversations and send messages.
         </p>
         <motion.div 
           animate={{ y: [0, 8, 0] }}
           transition={{ repeat: Infinity, duration: 1.5 }}
-          className="text-muted-foreground"
+          className={isDark ? "text-gray-400" : "text-gray-500"}
         >
           <ChevronRight className="h-6 w-6 transform -rotate-90" />
         </motion.div>
@@ -284,8 +334,51 @@ export default function Dashboard(): JSX.Element {
     </button>
   );
 
+  // Add this component for message visibility toggle
+  const MessageVisibilityToggle = () => (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => setShowMessages(!showMessages)}
+      className={cn(
+        "flex items-center gap-2 w-fit mb-6",
+        isDark ? "hover:bg-gray-800" : "hover:bg-gray-100"
+      )}
+    >
+      {showMessages ? (
+        <>
+          Hide Messages <ChevronUp className="h-4 w-4" />
+        </>
+      ) : (
+        <>
+          Show Messages <ChevronDown className="h-4 w-4" />
+        </>
+      )}
+    </Button>
+  );
+
+  type ChartData = {
+    name: string;
+    value: number;
+  };
+
+  const renderChart = (data: ChartData[]) => (
+    <div className="h-16 mt-4 w-full">
+      <BarChart width={200} height={60} data={data} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+        <Bar
+          dataKey="value"
+          fill={isDark ? "#3B82F6" : "#2563EB"}
+          radius={[4, 4, 0, 0]}
+        />
+      </BarChart>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-background relative flex flex-col transition-colors duration-300">
+    <div className={cn(
+      "min-h-screen relative flex flex-col transition-colors duration-300",
+      isDark ? "bg-gray-950" : "bg-gray-50"
+    )}>
       <Toaster position="top-right" theme={isDark ? 'dark' : 'light'} />
       
       {/* Suspense boundary for search params handling */}
@@ -320,7 +413,7 @@ export default function Dashboard(): JSX.Element {
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
+      {/* Sidebar - Unified dark/light mode */}
       <AnimatePresence mode="wait">
         {isSidebarOpen && (
           <motion.aside
@@ -328,18 +421,43 @@ export default function Dashboard(): JSX.Element {
             animate={{ x: 0 }}
             exit={{ x: -280 }}
             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-            className="fixed inset-y-0 left-0 w-[280px] bg-card shadow-lg z-40"
+            className={cn(
+              "fixed inset-y-0 left-0 w-[280px] z-40 border-r",
+              isDark 
+                ? "bg-gray-950 border-gray-800" 
+                : "bg-white border-gray-200"
+            )}
           >
             <div className="flex flex-col h-full">
-              <div className="p-4 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <Facebook className="h-8 w-8 text-blue-600" />
-                  <span className="text-xl font-bold">Messages</span>
+              <div className={cn(
+                "p-6 border-b",
+                isDark ? "border-gray-800" : "border-gray-200"
+              )}>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <Facebook className={cn(
+                      "h-8 w-8",
+                      isDark ? "text-blue-400" : "text-blue-600"
+                    )} />
+                  </div>
+                  <span className={cn(
+                    "text-xl font-bold",
+                    isDark ? "text-gray-100" : "text-gray-900"
+                  )}>
+                    Kicker<span className={isDark ? "text-blue-400" : "text-blue-600"}>Pro</span>
+                  </span>
                 </div>
               </div>
               
+              {/* Pages List - Enhanced */}
               <div className="flex-1 overflow-y-auto p-4">
                 <div className="space-y-2">
+                  <h2 className={cn(
+                    "text-sm font-semibold px-3 mb-4",
+                    isDark ? "text-gray-400" : "text-gray-500"
+                  )}>
+                    YOUR PAGES
+                  </h2>
                   {pages.map((page) => (
                     <motion.button
                       key={page.id}
@@ -347,12 +465,17 @@ export default function Dashboard(): JSX.Element {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       className={cn(
-                        "w-full p-3 flex items-center gap-3 rounded-lg transition-all",
+                        "w-full p-3 flex items-center gap-3 rounded-lg transition-all border",
                         selectedPage?.id === page.id 
-                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm"
-                          : "hover:bg-secondary"
-                      )}>
-                      <div className="w-10 h-10 relative overflow-hidden rounded-full">
+                          ? isDark 
+                            ? "bg-blue-950/30 border-blue-800/50 text-blue-400"
+                            : "bg-blue-50 border-blue-200 text-blue-700"
+                          : isDark
+                            ? "hover:bg-gray-900/50 border-transparent text-gray-100"
+                            : "hover:bg-gray-50 border-transparent text-gray-900"
+                      )}
+                    >
+                      <div className="w-10 h-10 relative overflow-hidden rounded-full ring-2 ring-white/10">
                         <Image
                           src={page.picture.data.url}
                           alt={page.name}
@@ -362,8 +485,18 @@ export default function Dashboard(): JSX.Element {
                         />
                       </div>
                       <div className="text-left">
-                        <div className="font-medium">{page.name}</div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className={cn(
+                          "font-medium",
+                          isDark 
+                            ? selectedPage?.id === page.id ? "text-blue-400" : "text-gray-100"
+                            : selectedPage?.id === page.id ? "text-blue-700" : "text-gray-900"
+                        )}>
+                          {page.name}
+                        </div>
+                        <div className={cn(
+                          "text-xs",
+                          isDark ? "text-gray-400" : "text-gray-500"
+                        )}>
                           {page.fan_count.toLocaleString()} followers
                         </div>
                       </div>
@@ -372,12 +505,21 @@ export default function Dashboard(): JSX.Element {
                 </div>
               </div>
 
-              <div className="p-4 border-t border-border">
+              {/* Sidebar Footer */}
+              <div className={cn(
+                "p-4 border-t",
+                isDark ? "border-gray-800" : "border-gray-200"
+              )}>
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  className={cn(
+                    "w-full flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors border",
+                    isDark 
+                      ? "text-red-400 hover:bg-red-950/30 border-red-900/30" 
+                      : "text-red-600 hover:bg-red-50 border-red-200/50"
+                  )}
                 >
                   <LogOut className="h-5 w-5" />
                   <span>Logout</span>
@@ -388,38 +530,68 @@ export default function Dashboard(): JSX.Element {
         )}
       </AnimatePresence>
 
-      {/* Main Content Wrapper */}
+      {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-screen">
         {/* Header */}
-        <header className="sticky top-0 z-30 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
-          <div className="flex h-16 items-center gap-4 px-4">
-            <MobileToggle />
-            <div className="flex-1" />
+        <header className={cn(
+          "sticky top-0 z-30 w-full border-b",
+          isDark 
+            ? "bg-gray-950/95 border-gray-800" 
+            : "bg-white/95 border-gray-200"
+        )}>
+          <div className="flex h-16 items-center justify-between gap-4 px-6">
+            <div className="flex items-center gap-4">
+              <MobileToggle />
+              {selectedPage && (
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 relative overflow-hidden rounded-full">
+                    <Image
+                      src={selectedPage.picture.data.url}
+                      alt={selectedPage.name}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                  <div>
+                    <h1 className={cn(
+                      "text-lg font-semibold",
+                      isDark ? "text-gray-100" : "text-gray-900"
+                    )}>{selectedPage.name}</h1>
+                    <p className={cn(
+                      "text-sm",
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    )}>
+                      {selectedPage.fan_count.toLocaleString()} followers
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={() => setTheme(isDark ? 'light' : 'dark')}
               className={cn(
-                "p-2 rounded-lg transition-colors",
+                "p-2.5 rounded-lg transition-colors",
                 isDark 
-                  ? "bg-white/10 hover:bg-white/20 text-yellow-400" 
-                  : "bg-gray-800 hover:bg-gray-900 text-yellow-400"
+                  ? "bg-gray-800 hover:bg-gray-700" 
+                  : "bg-gray-100 hover:bg-gray-200"
               )}
-              aria-label="Toggle theme"
             >
               {isDark ? (
-                <Sun className="h-5 w-5" />
+                <Sun className="h-5 w-5 text-gray-100" />
               ) : (
-                <Moon className="h-5 w-5" />
+                <Moon className="h-5 w-5 text-gray-900" />
               )}
             </motion.button>
           </div>
         </header>
 
-        {/* Main Content */}
+        {/* Main Content Area */}
         <main className={cn(
-          "flex-1 transition-all duration-300 px-4 py-6",
-          isSidebarOpen ? "lg:pl-[300px]" : "lg:pl-4"
+          "flex-1 transition-all duration-300 p-6",
+          isSidebarOpen ? "lg:pl-[300px]" : "lg:pl-6",
+          isDark ? "bg-gray-950" : "bg-gray-50"
         )}>
           {!selectedPage ? (
             <NoPageSelected />
@@ -430,289 +602,450 @@ export default function Dashboard(): JSX.Element {
               transition={{ duration: 0.4 }}
               className="max-w-7xl mx-auto space-y-8"
             >
-              {/* Page Header */}
-              <div className="flex flex-col gap-4 bg-card rounded-lg p-4 shadow-sm border border-border">
-                <div>
-                  <h1 className="text-xl font-bold">
-                    {selectedPage.name}
-                  </h1>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedPage.fan_count.toLocaleString()} followers
-                  </p>
-                </div>
-                <Button
-                  variant={isDark ? "outline" : "default"}
-                  size="sm"
-                  onClick={() => setShowMessages(!showMessages)}
-                  className="flex items-center gap-2 w-fit"
-                >
-                  {showMessages ? (
-                    <>
-                      Hide Messages <ChevronUp className="h-4 w-4" />
-                    </>
-                  ) : (
-                    <>
-                      Show Messages <ChevronDown className="h-4 w-4" />
-                    </>
-                  )}
-                </Button>
-              </div>
-              
-              {showMessages && (
-                <div className="text-sm text-muted-foreground">
-                  Showing {conversations.length} conversations
-                </div>
-              )}
-
-              {/* Conversations List - Collapsible */}
-              <AnimatePresence>
-                {showMessages && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="grid gap-4"
-                  >
-                    {conversations.length === 0 ? (
-                      <div className="bg-card border border-border rounded-lg p-8 text-center">
-                        <p className="text-muted-foreground">No conversations found for this page</p>
+              {/* Dashboard Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className={cn(
+                  "border-border relative overflow-hidden",
+                  isDark ? "bg-gray-900" : "bg-white"
+                )}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-gray-100" : "text-gray-900"
+                    )}>
+                      Total Conversations
+                    </CardTitle>
+                    <Mail className={cn(
+                      "h-4 w-4",
+                      isDark ? "text-blue-400" : "text-blue-600"
+                    )} />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className={cn(
+                        "text-2xl font-bold",
+                        isDark ? "text-gray-100" : "text-gray-900"
+                      )}>
+                        {conversations.length}
                       </div>
-                    ) : (
-                      conversations.map((conv) => (
-                        <motion.div
+                      <div className={cn(
+                        "text-xs",
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      )}>
+                        Active message threads
+                      </div>
+                      {renderChart(getChartData())}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className={cn(
+                  "border-border relative overflow-hidden",
+                  isDark ? "bg-gray-900" : "bg-white"
+                )}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-gray-100" : "text-gray-900"
+                    )}>
+                      Unread Messages
+                    </CardTitle>
+                    <ChevronRight className={cn(
+                      "h-4 w-4",
+                      isDark ? "text-blue-400" : "text-blue-600"
+                    )} />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className={cn(
+                        "text-2xl font-bold",
+                        isDark ? "text-gray-100" : "text-gray-900"
+                      )}>
+                        {conversations.reduce((acc, conv) => acc + (conv.unread_count || 0), 0)}
+                      </div>
+                      <div className={cn(
+                        "text-xs",
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      )}>
+                        Across all conversations
+                      </div>
+                      {renderChart(getChartData())}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className={cn(
+                  "border-border relative overflow-hidden",
+                  isDark ? "bg-gray-900" : "bg-white"
+                )}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-gray-100" : "text-gray-900"
+                    )}>
+                      Page Reach
+                    </CardTitle>
+                    <Users className={cn(
+                      "h-4 w-4",
+                      isDark ? "text-blue-400" : "text-blue-600"
+                    )} />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className={cn(
+                        "text-2xl font-bold",
+                        isDark ? "text-gray-100" : "text-gray-900"
+                      )}>
+                        {selectedPage.fan_count.toLocaleString()}
+                      </div>
+                      <div className={cn(
+                        "text-xs",
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      )}>
+                        Total page followers
+                      </div>
+                      {renderChart(getChartData())}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Message Visibility Toggle */}
+              <MessageVisibilityToggle />
+
+              {/* Enhanced Conversations Section */}
+              <Card className={cn(
+                "border-border shadow-md overflow-hidden",
+                isDark ? "bg-black border-gray-800" : "bg-white border-gray-200"
+              )}>
+                <CardHeader>
+                  <CardTitle className={cn(
+                    isDark ? "text-gray-100" : "text-gray-900"
+                  )}>
+                    Recent Conversations
+                  </CardTitle>
+                  <CardDescription className={cn(
+                    isDark ? "text-gray-400" : "text-gray-500"
+                  )}>
+                    Manage and reply to your recent message threads
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {conversations.length === 0 ? (
+                    <div className={cn(
+                      "rounded-lg p-8 text-center",
+                      isDark ? "bg-gray-950 border border-gray-800" : "bg-gray-50 border border-gray-200"
+                    )}>
+                      <p className={isDark ? "text-gray-400" : "text-gray-500"}>
+                        No conversations found for this page
+                      </p>
+                    </div>
+                  ) : (
+                    conversations.map((conv) => (
+                        <AnimatePresence key={conv.id}>
+                        {showMessages && (
+                          <motion.div
                           key={conv.id}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          whileHover={{ scale: 1.01 }}
-                          className="bg-card border border-border rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-300"
-                        >
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className={cn(
+                            "rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-300",
+                            isDark 
+                            ? "bg-gray-950 border border-gray-800" 
+                            : "bg-white border border-gray-200"
+                          )}
+                          >
                           <div className="flex items-start justify-between">
                             <div className="flex items-start gap-3">
-                              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-semibold">
-                                {conv.participants.data[0].name.charAt(0)}
-                              </div>
-                              <div>
-                                <h3 className="font-medium">
-                                  {conv.participants.data[0].name}
-                                </h3>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  {conv.snippet}
-                                </p>
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className="text-xs text-muted-foreground">
-                                    {new Date(conv.updated_time).toLocaleString()}
-                                  </span>
-                                  {conv.unread_count > 0 && (
-                                    <Badge className={cn(
-                                      isDark ? "bg-blue-800 text-blue-100" : "bg-blue-100 text-blue-800"
-                                    )}>
-                                      {conv.unread_count} unread
-                                    </Badge>
-                                  )}
-                                </div>
+                            <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-semibold">
+                              {conv.participants.data[0].name.charAt(0)}
+                            </div>
+                            <div>
+                              <h3 className="font-medium">
+                              {conv.participants.data[0].name}
+                              </h3>
+                              <p className="text-sm text-muted-foreground mt-1">
+                              {conv.snippet}
+                              </p>
+                              <div className="flex items-center gap-2 mt-2">
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(conv.updated_time).toLocaleString()}
+                              </span>
+                              {conv.unread_count > 0 && (
+                                <Badge className={cn(
+                                isDark ? "bg-blue-800 text-blue-100" : "bg-blue-100 text-blue-800"
+                                )}>
+                                {conv.unread_count} unread
+                                </Badge>
+                              )}
                               </div>
                             </div>
+                            </div>
                             <Button
-                              variant={isDark ? "outline" : "default"}
-                              size="sm"
-                              onClick={() => {
-                                setSelectedConversation(conv);
-                                setIsMessageModalOpen(true);
-                              }}
-                              disabled={!conv.can_reply}
-                              className={cn(
-                                "transition-all",
-                                !conv.can_reply && isDark
-                                  ? "opacity-50 cursor-not-allowed" 
-                                  : ""
-                              )}
+                            variant={isDark ? "outline" : "default"}
+                            size="sm"
+                            onClick={() => {
+                              setSelectedConversation(conv);
+                              setIsMessageModalOpen(true);
+                            }}
+                            disabled={!conv.can_reply}
+                            className={cn(
+                              "transition-all",
+                              !conv.can_reply && isDark
+                              ? "opacity-50 cursor-not-allowed" 
+                              : ""
+                            )}
                             >
-                              <Send className="h-4 w-4 mr-2" />
-                              Reply
+                            <Send className="h-4 w-4 mr-2" />
+                            Reply
                             </Button>
                           </div>
-                        </motion.div>
-                      ))
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                          </motion.div>
+                        )}
+                        </AnimatePresence>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
 
-              {/* Bulk Message Controls */}
-              <div className="space-y-6">
-                {/* Step 1: Select Recipients */}
-                <motion.section
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.1 }}
-                  className="bg-card border border-border rounded-lg p-6 shadow-sm"
-                >
-                  <h2 className="text-xl font-semibold mb-4">
-                    Step 1: Select Recipients
-                  </h2>
-                  <div className="flex items-center gap-4">
-                    <Button
-                      onClick={() => setSelectedRecipients(conversations.map((c) => c.participants.data[0].id))}
-                      variant={isDark ? "outline" : "default"}
-                      className={cn(
-                        isDark ? "hover:bg-gray-800" : "hover:bg-gray-200",
-                        "transition-colors"
-                      )}
-                    >
-                      Select All Recipients ({conversations.length})
-                    </Button>
-                    {selectedRecipients.length > 0 && (
-                      <Badge variant={isDark ? "outline" : "secondary"} className="px-3 py-1">
-                        {selectedRecipients.length} selected
-                      </Badge>
+              {/* Enhanced Bulk Messaging Section */}
+
+              <Card className={cn(
+                "border-border shadow-lg",
+                isDark ? "bg-black border-gray-800" : "bg-white border-gray-200"
+              )}>
+                <CardHeader className={cn(
+                  "border-b",
+                  isDark ? "border-gray-800" : "border-gray-200"
+                )}>
+                  <CardTitle className={isDark ? "text-gray-100" : "text-gray-900"}>
+                    Bulk Message Campaign
+                  </CardTitle>
+                  <CardDescription className={isDark ? "text-gray-400" : "text-gray-500"}>
+                    Send messages to multiple recipients at once
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6 mt-6">
+                  {/* Step 1: Select Recipients */}
+                  <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 }}
+                    className={cn(
+                      "rounded-lg p-6",
+                      isDark ? "bg-gray-950 border border-gray-800" : "bg-gray-50 border border-gray-200"
                     )}
-                  </div>
-                </motion.section>
-                
-                <motion.section
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.2 }}
-                  className="bg-card border border-border rounded-lg p-6 shadow-sm"
-                >
-                  <h2 className="text-xl font-semibold mb-4">
-                    Step 2: Message Type
-                  </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {messageTags.map((tag) => (
-                      <motion.div key={tag.value} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                        <Button
-                          variant={selectedTag === tag.value ? "default" : isDark ? "outline" : "default"}
-                          onClick={() => setSelectedTag(tag.value)}
-                          className={cn(
-                            "w-full transition-colors",
-                            selectedTag === tag.value
-                              ? "bg-blue-600 hover:bg-blue-700 text-white"
-                              : isDark 
-                                ? "hover:bg-gray-800" 
-                                : "hover:bg-gray-200"
-                          )}
+                  >
+                    <h2 className={cn(
+                      "text-lg font-semibold mb-4",
+                      isDark ? "text-gray-100" : "text-gray-900"
+                    )}>
+                      Step 1: Select Recipients
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-4 mt-2">
+                      <Button
+                        onClick={() => setSelectedRecipients(
+                          selectedRecipients.length === conversations.length 
+                            ? [] 
+                            : conversations.map(c => c.participants.data[0].id)
+                        )}
+                        variant={selectedRecipients.length === conversations.length ? "default" : "outline"}
+                        className={cn(
+                          "transition-colors",
+                          selectedRecipients.length === conversations.length
+                            ? "bg-blue-600 hover:bg-blue-700 text-white"
+                            : isDark
+                              ? "bg-transparent border-gray-800 text-gray-100 hover:bg-gray-800 hover:text-gray-100"
+                              : "bg-transparent border-gray-200 text-gray-900 hover:bg-gray-100"
+                        )}
+                      >
+                        {selectedRecipients.length === conversations.length 
+                          ? `Deselect All Recipients (${conversations.length})`
+                          : `Select All Recipients (${conversations.length})`
+                        }
+                      </Button>
+                        {selectedRecipients.length > 0 && (
+                        <Badge 
+                          variant="outline" 
+                          className="bg-blue-900/30 text-blue-400 border-blue-800"
                         >
-                          {tag.label}
-                        </Button>
-                      </motion.div>
-                    ))}
-                  </div>
-                </motion.section>
-
-                {/* Step 3: Write Message */}
-                <motion.section
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.3 }}
-                  className="bg-card border border-border rounded-lg p-6 shadow-sm"
-                >
-                  <h2 className="text-xl font-semibold mb-4">
+                          {selectedRecipients.length} selected
+                        </Badge>
+                        )}
+                    </div>
+                  </motion.section>
+                  {/* Step 2: Message Type */}
+                  <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.2 }}
+                    className={cn(
+                      "rounded-lg p-6",
+                      isDark ? "bg-gray-950 border border-gray-800" : "bg-gray-50 border border-gray-200"
+                    )}
+                  >
+                    <h2 className={cn(
+                      "text-lg font-semibold mb-4",
+                      isDark ? "text-gray-100" : "text-gray-900"
+                    )}>
+                      Step 2: Message Type
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+                      {messageTags.map((tag) => (
+                        <motion.div 
+                          key={tag.value} 
+                          whileHover={{ scale: 1.02 }} 
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <Button
+                            variant={selectedTag === tag.value ? "default" : "outline"}
+                            onClick={() => setSelectedTag(tag.value)}
+                            className={cn(
+                              "w-full transition-colors",
+                              selectedTag === tag.value
+                                ? "bg-blue-600 hover:bg-blue-700 text-white border-transparent"
+                                : "bg-transparent border-gray-800 text-gray-100 hover:bg-gray-800"
+                            )}
+                          >
+                            {tag.label}
+                          </Button>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </motion.section>
+                  {/* Step 3: Write Message */}
+                  <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.3 }}
+                    className={cn(
+                      "rounded-lg p-6",
+                      isDark ? "bg-gray-950 border border-gray-800" : "bg-gray-50 border border-gray-200"
+                    )}
+                  >
+                  <h2 className={cn(
+                    "text-lg font-semibold mb-4",
+                    isDark ? "text-gray-100" : "text-gray-900"
+                  )}>
                     Step 3: Write Message
                   </h2>
                   <div className="space-y-4">
-                    <Textarea
-                      value={messageText}
-                      onChange={(e) => setMessageText(e.target.value)}
-                      placeholder="Write your message here..."
-                      className="min-h-[100px]"
-                    />
-                    <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                      <Button
-                        onClick={handleBulkSend}
-                        disabled={!messageText || selectedRecipients.length === 0 || sendingMessages}
+                      <Textarea
+                        value={messageText}
+                        onChange={(e) => setMessageText(e.target.value)}
+                        placeholder="Write your message here..."
                         className={cn(
-                          "transition-all",
-                          !messageText || selectedRecipients.length === 0 || sendingMessages
-                            ? "opacity-50 cursor-not-allowed"
-                            : "bg-blue-600 hover:bg-blue-700"
+                          "min-h-[100px]",
+                          isDark 
+                            ? "bg-black border-gray-800 text-gray-100 placeholder:text-gray-500" 
+                            : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
                         )}
+                      />
+                      <motion.div 
+                        whileHover={{ scale: 1.02 }} 
+                        whileTap={{ scale: 0.98 }}
                       >
-                        {sendingMessages ? (
-                          <span className="flex items-center">
-                            <motion.span
-                              animate={{ rotate: 360 }}
-                              transition={{ 
-                                repeat: Infinity, 
-                                duration: 1,
-                                ease: "linear"
-                              }}
-                              className="mr-2"
-                            >
-                              <Send className="h-4 w-4" />
-                            </motion.span>
-                            Sending...
-                          </span>
-                        ) : (
-                          'Send Messages'
-                        )}
-                      </Button>
-                    </motion.div>
-                  </div>
-                </motion.section>
-              </div>
+                        <Button
+                          onClick={handleBulkSend}
+                          disabled={!messageText || selectedRecipients.length === 0 || sendingMessages}
+                          className={cn(
+                            "w-full transition-all",
+                            !messageText || selectedRecipients.length === 0 || sendingMessages
+                              ? "opacity-50 cursor-not-allowed"
+                              : "bg-blue-600 hover:bg-blue-700 text-white"
+                          )}
+                        >
+                          {sendingMessages ? (
+                            <span className="flex items-center justify-center">
+                              <motion.span
+                                animate={{ rotate: 360 }}
+                                transition={{ 
+                                  repeat: Infinity, 
+                                  duration: 1,
+                                  ease: "linear"
+                                }}
+                                className="mr-2"
+                              >
+                                <Send className="h-4 w-4" />
+                              </motion.span>
+                              Sending...
+                            </span>
+                          ) : (
+                            'Send Messages'
+                          )}
+                        </Button>
+                      </motion.div>
+                    </div>
+                  </motion.section>
+                </CardContent>
+              </Card>
             </motion.div>
           )}
         </main>
-
-        {/* Message Modal */}
-        <Dialog open={isMessageModalOpen} onOpenChange={setIsMessageModalOpen}>
-          <DialogContent className={isDark ? "border-gray-700 bg-gray-900" : ""}>
-            <DialogHeader>
-              <DialogTitle>
-                Send Message to {selectedConversation?.participants.data[0].name}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="p-4">
-              <Textarea
-                value={replyMessage}
-                onChange={(e) => setReplyMessage(e.target.value)}
-                placeholder="Type your message..."
-                className="min-h-[100px]"
-              />
-            </div>
-            <DialogFooter className="sm:justify-end">
-              <Button
-                variant={isDark ? "outline" : "default"}
-                onClick={() => setIsMessageModalOpen(false)} 
-                className={isDark ? "border-gray-700 hover:bg-gray-800" : ""}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSendReply}
-                disabled={!replyMessage.trim() || sendingMessages}
-                className={cn(
-                  "transition-all",
-                  !replyMessage.trim() || sendingMessages
-                    ? "opacity-50 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700"
-                )}
-              >
-                {sendingMessages ? (
-                  <span className="flex items-center">
-                    <motion.span
-                      animate={{ rotate: 360 }}
-                      transition={{ 
-                        repeat: Infinity, 
-                        duration: 1,
-                        ease: "linear"
-                      }}
-                      className="mr-2"
-                    >
-                      <Send className="h-4 w-4" />
-                    </motion.span>
-                    Sending...
-                  </span>
-                ) : (
-                  'Send'
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
+
+      {/* Enhanced Dialog */}
+      <Dialog open={isMessageModalOpen} onOpenChange={setIsMessageModalOpen}>
+        <DialogContent className={cn(
+          "sm:max-w-[500px]",
+          isDark 
+            ? "bg-gray-950 border-gray-800" 
+            : "bg-white border-gray-200"
+        )}>
+          <DialogHeader>
+            <DialogTitle>
+              Send Message to {selectedConversation?.participants.data[0].name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="p-4">
+            <Textarea
+              value={replyMessage}
+              onChange={(e) => setReplyMessage(e.target.value)}
+              placeholder="Type your message..."
+              className="min-h-[100px]"
+            />
+          </div>
+          <DialogFooter className="sm:justify-end">
+            <Button
+              variant={isDark ? "outline" : "default"}
+              onClick={() => setIsMessageModalOpen(false)} 
+              className={isDark ? "border-gray-700 hover:bg-gray-800" : ""}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendReply}
+              disabled={!replyMessage.trim() || sendingMessages}
+              className={cn(
+                "transition-all",
+                !replyMessage.trim() || sendingMessages
+                  ? "opacity-50 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              )}
+            >
+              {sendingMessages ? (
+                <span className="flex items-center">
+                  <motion.span
+                    animate={{ rotate: 360 }}
+                    transition={{ 
+                      repeat: Infinity, 
+                      duration: 1,
+                      ease: "linear"
+                    }}
+                    className="mr-2"
+                  >
+                    <Send className="h-4 w-4" />
+                  </motion.span>
+                  Sending...
+                </span>
+              ) : (
+                'Send'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
