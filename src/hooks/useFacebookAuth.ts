@@ -51,7 +51,6 @@ export function useFacebookAuth() {
         return;
       }
 
-      // Check stored token
       const storedToken = localStorage.getItem('fb_access_token');
       if (storedToken) {
         setToken(storedToken);

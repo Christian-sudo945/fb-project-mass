@@ -3,9 +3,9 @@
 import { JSX, useCallback, useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Sun, Moon, LogOut, Facebook, ChevronRight, Mail, Users, ChevronUp, ChevronDown, AlertCircle, Settings, HelpCircle, MoreVertical } from 'lucide-react';
+import { Send, Sun, Moon, LogOut, Facebook, ChevronRight, Mail, Users, ChevronUp, ChevronDown, AlertCircle } from 'lucide-react';
 import { useFacebookAuth } from '@/hooks/useFacebookAuth';
-import { getPages, type FacebookPage, type Conversation, getCurrentUser, type FacebookUser } from '@/lib/facebook';
+import { getPages, type FacebookPage, type Conversation, getCurrentUser, type FacebookUser, fetchConversations } from '@/lib/facebook';
 import { useAuthStore } from '@/store/auth';
 
 import Cookies from 'js-cookie';
@@ -33,15 +33,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 const SearchParamsHandler = ({ onTokenFound }: { onTokenFound: (token: string) => void }) => {
   const searchParams = useSearchParams();
@@ -216,27 +207,42 @@ export default function Dashboard(): JSX.Element {
     return result;
   }, [conversations]);
 
-  // Early return for hydration
   if (!mounted) {
     return <div className="min-h-screen bg-background" />;
   }
 
   const isDark = theme === 'dark';
 
-  const fetchConversations = async (pageId: string, pageToken: string) => {
+  const fetchPageConversations = async (pageId: string, pageToken: string) => {
+    const loadingToastId = toast.loading('Loading conversations...');
+    
     try {
-      const response = await fetch(
-        `https://graph.facebook.com/v16.0/me/conversations?` +
-        `access_token=${pageToken}&` +
-        `fields=id,unread_count,updated_time,participants,snippet,can_reply&` +
-        `limit=50`
-      );
-      const data = await response.json();
-      setConversations(data.data);
+      const result = await fetchConversations(pageId, pageToken);
+      
+      if (result?.success) {
+        setConversations(result.data);
+        if (result?.total && result.total > 0) {
+          toast.success(
+            result.fromCache 
+              ? `Loaded ${result.total} conversations from cache` 
+              : `Loaded ${result.total} conversations`, 
+            { id: loadingToastId }
+          );
+        } else {
+          toast.success('No conversations found', { id: loadingToastId });
+        }
+      } else {
+        toast.error(result?.error || "Failed to fetch conversations", { id: loadingToastId });
+      }
     } catch (error) {
       console.error('Error fetching conversations:', error);
-      toast.error("Failed to fetch conversations");
+      toast.error("Failed to fetch conversations", { id: loadingToastId });
     }
+  };
+  
+  const handlePageSelect = async (page: FacebookPage) => {
+    setSelectedPage(page);
+    await fetchPageConversations(page.id, page.access_token);
   };
 
   const sendMessage = async (conversationId: string, message: string, pageToken: string) => {
@@ -260,11 +266,6 @@ export default function Dashboard(): JSX.Element {
       console.error('Error sending message:', error);
       return null;
     }
-  };
-
-  const handlePageSelect = async (page: FacebookPage) => {
-    setSelectedPage(page);
-    await fetchConversations(page.id, page.access_token);
   };
 
   const handleSendReply = async () => {
@@ -296,17 +297,47 @@ export default function Dashboard(): JSX.Element {
 
   const handleBulkSend = async () => {
     if (!selectedPage) return;
-
+  
     try {
       setSendingMessages(true);
+      const total = selectedRecipients.length;
+      let successful = 0;
+      
+      // Show initial progress toast
+      const progressToastId = toast.loading(`Starting to send messages...`);
+  
       await sendBulkMessage(
         selectedPage.id,
         selectedPage.access_token,
         selectedRecipients,
         messageText,
-        selectedTag
+        selectedTag,
+        (sent, recipientId, error) => {
+          if (sent) {
+            successful++;
+            toast.success(`Message sent (${successful}/${total})`, {
+              duration: 2000,
+            });
+          } else {
+            toast.error(`Failed to send message: ${error}`, {
+              duration: 3000,
+            });
+          }
+          
+          // Update progress toast
+          toast.loading(
+            `Sending messages: ${successful}/${total}`, 
+            { id: progressToastId }
+          );
+        }
       );
-      toast.success(`Messages sent successfully to ${selectedRecipients.length} recipients`);
+  
+      // Final success message
+      toast.success(`Completed: ${successful}/${total} messages sent`, {
+        id: progressToastId,
+        duration: 5000,
+      });
+  
       setMessageText('');
       setSelectedRecipients([]);
     } catch (error) {
@@ -316,6 +347,7 @@ export default function Dashboard(): JSX.Element {
       setSendingMessages(false);
     }
   };
+  
 
   // Early return if no page is selected
   const NoPageSelected = (): JSX.Element => (
@@ -378,11 +410,7 @@ export default function Dashboard(): JSX.Element {
   );
   
 
-  const tagOptions = [
-    { value: 'CONFIRMED_EVENT_UPDATE', label: 'Event Update' },
-    { value: 'POST_PURCHASE_UPDATE', label: 'Purchase Update' },
-    { value: 'ACCOUNT_UPDATE', label: 'Account Update' }
-  ];
+  
   const MobileToggle = () => (
     <button
       onClick={() => setSidebarOpen(!isSidebarOpen)}
@@ -418,24 +446,7 @@ export default function Dashboard(): JSX.Element {
 
  
 
-  const LoadingCard = () => (
-    <Card className={cn(
-      "border-border relative overflow-hidden",
-      isDark ? "bg-gray-900" : "bg-white"
-    )}>
-      <CardHeader className="space-y-2">
-        <Skeleton className="h-4 w-1/3" />
-        <Skeleton className="h-4 w-1/2" />
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-2/3" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-
+  
   type ChartData = {
     name: string;
     value: number;
@@ -679,7 +690,7 @@ export default function Dashboard(): JSX.Element {
                 <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={() => window.open(`https://facebook.com/${selectedPage.id}`, '_blank')}
+                onClick={() => selectedPage && window.open(`https://facebook.com/${selectedPage.id}`, '_blank')}
                 className="w-8 h-8 relative overflow-hidden rounded-full ring-2 ring-offset-2 ring-blue-500 cursor-pointer hover:opacity-80 transition-opacity"
               >
                 <Image
@@ -703,7 +714,7 @@ export default function Dashboard(): JSX.Element {
               )}
                 onClick={() => window.open(`https://facebook.com/${selectedPage.id}`, '_blank')}
               >
-                {selectedPage.name}
+                {selectedPage?.name}
                 {selectedPage.fan_count > 10000 && (
                 <TooltipProvider>
                   <Tooltip>
@@ -752,7 +763,7 @@ export default function Dashboard(): JSX.Element {
             isDark 
               ? "bg-gray-800 hover:bg-gray-700" 
               : "bg-gray-100 hover:bg-gray-200"
-          )}
+              )}
               >
           {isDark ? (
             <Sun className="h-5 w-5 text-gray-100" />
@@ -902,25 +913,46 @@ export default function Dashboard(): JSX.Element {
                   )}>
                     Recent Conversations
                   </CardTitle>
-                  <CardDescription className={cn(
-                    isDark ? "text-gray-400" : "text-gray-500"
-                  )}>
-                    Manage and reply to your recent message threads
-                  </CardDescription>
+                    <CardDescription className={cn(
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    )}>
+                      {conversations.length === 0 ? (
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 text-yellow-500" />
+                          <span>No messages found</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4" />
+                          <span>{conversations.length} conversations</span>
+                        </div>
+                      )}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {conversations.length === 0 ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="animate-pulse space-y-4">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-full bg-gray-200 dark:bg-gray-700" />
-                          <div className="space-y-2 flex-1">
-                            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
-                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
-                          </div>
+                    <div className="text-center py-8">
+                      <div className="flex flex-col items-center gap-4">
+                        <Mail className={cn(
+                          "h-12 w-12",
+                          isDark ? "text-gray-700" : "text-gray-300"
+                        )} />
+                        <div className="space-y-2">
+                          <h3 className={cn(
+                            "font-medium",
+                            isDark ? "text-gray-400" : "text-gray-600"
+                          )}>
+                            No Messages Found
+                          </h3>
+                          <p className={cn(
+                            "text-sm",
+                            isDark ? "text-gray-500" : "text-gray-400"
+                          )}>
+                            There are no conversations available at the moment.
+                          </p>
                         </div>
                       </div>
-                    ))
+                    </div>
                   ) : (
                     conversations.map((conv) => (
                         <AnimatePresence key={conv.id}>
